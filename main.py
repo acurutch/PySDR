@@ -35,6 +35,7 @@ from lib import symbol_demod_QAM as demod
 import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
+from lib import CRC
 
 # Declare Variables
 fs = 2.4e9             # carrier frequency 
@@ -57,19 +58,27 @@ not exceeding a magnitude of 1
 The data generated is a random binary sequence of length 256. This number was chosen
 arbitrarily.
 
+This data is then assigned a CRC polynomial based on the key below. This key is the "best"
+12 bit key for a Hamming Distance of 2. Basically, the key is used as the divisor in a
+modulo-2 division operation on the data. The remainder is another polynomial that is then
+appended to the data. More explanation to come at the error check in the end.
+
 The matched filter coefficients are used in frame detection. This is a flipped version
 of the preamble sequence that is convolved with the received data to generate a crosscorrelation.
 
 Resources:
 https://ntrs.nasa.gov/citations/19800017860
-
+https://www.geeksforgeeks.org/cyclic-redundancy-check-python/#
 
 """
 preamble = np.array([0,1,0,0,0,0,1,1,0,0,0,1,0,1,0,0,1,1,1,1,0,1,0,0,0,1,1,1,0,0,1,0,0,1,0,1,1,0,1,1,1,0,1,1,0,0,1,1,0,1,0,1,0,1,1,1,1,1,1,0]).astype(float) # optimal periodic binary code for N = 63 https://ntrs.nasa.gov/citations/19800017860
 
 data = np.random.randint(2, size=256).astype(float)
 
-bits = np.append(preamble,data)
+CRC_key = np.array([1,0,0,1,1,0,0,0,0,1,1,1]) # Best CRC polynomials: https://users.ece.cmu.edu/~koopman/crc/
+data_encoded = CRC.encodeData(data, CRC_key)
+
+bits = np.append(preamble,data_encoded)
 
 sps = M # samples per symbol, equal to oversampling factor
 
@@ -398,7 +407,7 @@ plt.show()
 
 idx = np.array(crosscorr).argmax()
 
-recoveredPayload = testpacket[idx-len(preamble)+1:idx+len(data)+1] # Reconstruct original packet minus preamble
+recoveredPayload = testpacket[idx-len(preamble)+1:idx+len(data_encoded)+1] # Reconstruct original packet minus preamble
 recoveredData = recoveredPayload[len(preamble):]
 
 # Plot
@@ -411,7 +420,7 @@ plt.show()
 
 
 """
-Demodulation
+Demodulation // Error Checking
 
 Demodulation is the process of mapping data symbols back to data bits. A
 maximum likelihood detection scheme is implemented by making determinations
@@ -421,13 +430,27 @@ Anything to the left of I=0 is interpreted as a -1, anything to the
 right is interpreted as a 1. 1 maps to 1, while -1 maps to 0. This
 is how the original bits are reconstructed.
 
+Error checking is done using Cyclic Redundancy Check. This basically does
+modulo-2 division using a known polynomial key. When the data was initialized
+and encoded, the remainder of the mod-2 division operation was appended to the
+data. Now, when mod-2 division is done using the same key, the remainder should
+be zero.
+
+This is simply an error detecting operation. Forward error correction, which
+involves sending redundant data, should be looked into in the future to 
+minimize BER.
+
 Reference: 
 https://pysdr.org/content/digital_modulation.html
 https://wirelesspi.com/packing-more-bits-in-one-symbol/
+https://www.geeksforgeeks.org/cyclic-redundancy-check-python/#
+http://www.sunshine2k.de/articles/coding/crc/understanding_crc.html
 
 """
 
 demod_bits = demod.symbol_demod(recoveredData, scheme, 1, len(preamble)) # gain has to be set to 1
+error = CRC.CRCcheck(demod_bits, CRC_key)
+print("CRC error: " + str(error))
 
 # Plot
 plt.stem(np.real(demod_bits), label="Recovered Data")
