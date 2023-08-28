@@ -5,7 +5,6 @@ Synchronization convenience functions
 
 import numpy as np
 from scipy import signal
-import matplotlib.pyplot as plt
 
 #####################################
 # Muller and Muller Clock recovery
@@ -13,12 +12,6 @@ import matplotlib.pyplot as plt
 
 def mmcr(testpacket):
     samples_interpolated = signal.resample_poly(testpacket, 16, 1)
-
-    # Plot
-    plt.stem(np.real(samples_interpolated), 'bo')
-    plt.stem(np.real(testpacket), 'ro')
-    plt.title("After non-idealities")
-    plt.show()
 
     mu = 0 # initial estimate of phase of sample
     out = np.zeros(len(testpacket) + 10, dtype=complex)
@@ -84,10 +77,6 @@ def costas(testpacket):
             phase -= 2*np.pi
         while phase < 0:
             phase += 2*np.pi
-
-    # Plot freq over time to see how long it takes to hit the right offset
-    # plt.plot(freq_log,'.-')
-    # plt.show()
 
     testpacket = out
 
